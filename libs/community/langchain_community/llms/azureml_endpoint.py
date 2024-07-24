@@ -348,6 +348,37 @@ class LlamaContentFormatter(CustomOpenAIContentFormatter):
         )
 
 
+class Llama3ContentFormatter(ContentFormatterBase):
+    """Content handler for the Llama3.1 models"""
+
+    @property
+    def supported_api_types(self) -> List[AzureMLEndpointApiType]:
+        return [AzureMLEndpointApiType.dedicated, AzureMLEndpointApiType.serverless]
+
+    def format_request_payload(  # type: ignore[override]
+            self, prompt: str, model_kwargs: Dict, api_type: AzureMLEndpointApiType
+    ) -> bytes:
+        prompt = ContentFormatterBase.escape_special_characters(prompt)
+        input = {"messages": [{"role": "user", "content": prompt}], **model_kwargs}
+        request_payload = json.dumps(input)
+        return str.encode(request_payload)
+
+    def format_response_payload(  # type: ignore[override]
+            self, output: bytes, api_type: AzureMLEndpointApiType
+    ) -> Generation:
+        try:
+            resp = json.loads(output)
+            generation_info = {'usage': resp['usage'], 'id': resp['id']}
+            choices = resp['choices']
+            choice = choices[0]
+            message = choice['message']
+            content = message['content']
+        except (KeyError, IndexError, TypeError) as e:
+            raise ValueError(self.format_error_msg.format(api_type=api_type)) from e  # type: ignore[union-attr]
+        return Generation(text=content, generation_info=generation_info)
+
+
+
 class AzureMLBaseEndpoint(BaseModel):
     """Azure ML Online Endpoint models."""
 
